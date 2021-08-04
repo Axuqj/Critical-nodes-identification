@@ -20,4 +20,8 @@ KS-test.py is to test the KSBG method.
 
 As above, other files are the codes of methods and their experiments.
 
-And also, all the datasets are provided.
+generate_SBM.m   generates the SBM model.
+
+generate_RN.m  generates the RN model.
+
+And also, all the other datasets are provided.

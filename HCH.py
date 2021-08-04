@@ -1,0 +1,322 @@
+#!/usr/bin/env python3
+import copy
+import networkx as nx
+import numpy as np
+
+class PyLouvain:
+    '''
+        Builds a graph from _path.
+        _path: a path to a file containing "node_from node_to" edges (one per line)
+    '''
+    @classmethod
+    def from_file1(cls, path): #接收邻接矩阵
+        f = open(path, 'r')
+        lines = f.readlines()
+        f.close()
+        nodes = {}
+        edges = []
+        k=0 #记录当前行数
+        for line in lines:
+            nodes[k]=1 
+            n = line.split()
+            if not n:
+                break
+            m = len(n)  #一行有多少数
+            for i in range(0,m):
+                if int(n[i]) != 0:
+                    nodes[i]=1
+                    w=1  
+                    if int(n[i]) != 1:
+                        w = n[i]
+                    edges.append(((k, i), w))
+            k+=1
+        # rebuild graph with successive identifiers
+        # nodes_, edges_ = in_order(nodes, edges)
+        print("%d nodes, %d edges" % (len(nodes), len(edges)))
+        return cls(nodes, edges)
+        
+
+    @classmethod
+    def from_file(cls, path):
+        f = open(path, 'r')
+        lines = f.readlines()
+        f.close()
+        nodes = {}
+        edges = []
+        for line in lines:
+            n = line.split()
+            if not n:
+                break
+            nodes[n[0]] = 1
+            nodes[n[1]] = 1
+            w = 1
+            if len(n) == 3:
+                w = int(n[2])
+            edges.append(((n[0], n[1]), w))
+        # rebuild graph with successive identifiers
+        # nodes_, edges_ = in_order(nodes, edges)
+        print("%d nodes, %d edges" % (len(nodes), len(edges)))
+        return cls(nodes, edges)
+
+    '''
+        Builds a graph from _path.
+        _path: a path to a file following the Graph Modeling Language specification
+    '''
+    @classmethod
+    def from_gml_file(cls, path):
+        f = open(path, 'r')
+        lines = f.readlines()
+        f.close()
+        nodes = {}
+        edges = []
+        current_edge = (-1, -1, 1)
+        in_edge = 0
+        for line in lines:
+            words = line.split()
+            if not words:
+                break
+            if words[0] == 'id':
+                nodes[int(words[1])] = 1
+            elif words[0] == 'source':
+                in_edge = 1
+                current_edge = (int(words[1]), current_edge[1], current_edge[2])
+            elif words[0] == 'target' and in_edge:
+                current_edge = (current_edge[0], int(words[1]), current_edge[2])
+            elif words[0] == 'value' and in_edge:
+                current_edge = (current_edge[0], current_edge[1], int(words[1]))
+            elif words[0] == ']' and in_edge:
+                edges.append(((current_edge[0], current_edge[1]), 1))
+                current_edge = (-1, -1, 1)
+                in_edge = 0
+        # nodes, edges = in_order(nodes, edges)
+        print("%d nodes, %d edges" % (len(nodes), len(edges)))
+        return cls(nodes, edges)
+
+    @classmethod
+    def from_ERgraph(cls, n,m): # n为点数，m为边
+        p = 2*m/(n*(n-1))
+        G = nx.random_graphs.erdos_renyi_graph(n,p)
+        Gnodes = {}
+        Gedges = []
+        for nd in G.nodes:
+            Gnodes[nd]=1
+        for ed in G.edges:
+            Gedges.append(((ed[0],ed[1]),1))
+        print("%d nodes, %d edges" % (len(Gnodes), len(Gedges)))
+        return cls(Gnodes, Gedges)
+
+    @classmethod
+    def from_WSgraph(cls, a,b,p): # a为点数，b为邻居数，p为重连概率
+        G = nx.random_graphs.watts_strogatz_graph(a,b,p)
+        Gnodes = {}
+        Gedges = []
+        for nd in G.nodes:
+            Gnodes[nd]=1
+        for ed in G.edges:
+            Gedges.append(((ed[0],ed[1]),1))
+        print("%d nodes, %d edges" % (len(Gnodes), len(Gedges)))
+        return cls(Gnodes, Gedges)
+
+    @classmethod
+    def from_BAgraph(cls, n,m): # n为点数，m为每次加入数
+        G = nx.random_graphs.barabasi_albert_graph(n,m)
+        Gnodes = {}
+        Gedges = []
+        for nd in G.nodes:
+            Gnodes[nd]=1
+        for ed in G.edges:
+            Gedges.append(((ed[0],ed[1]),1))
+        print("%d nodes, %d edges" % (len(Gnodes), len(Gedges)))
+        return cls(Gnodes, Gedges)
+
+    '''
+        Initializes the method.
+        _nodes: a list of ints
+        _edges: a list of ((int, int), weight) pairs
+    '''
+    def __init__(self, nodes, edges):
+        self.nodes = nodes
+        self.edges = edges
+        # precompute m (sum of the weights of all links in network)
+        #            k_i (sum of the weights of the links incident to node i)
+        self.m = 0
+        self.k_i = [0 for n in nodes]
+        self.edges_of_node = {}
+        self.w = [0 for n in nodes]
+        for e in edges:
+            # save edges by node
+            if e[0][0] not in self.edges_of_node:
+                self.edges_of_node[e[0][0]] = [e]
+            else:
+                self.edges_of_node[e[0][0]].append(e)
+            if e[0][1] not in self.edges_of_node:
+                self.edges_of_node[e[0][1]] = [e]
+            elif e[0][0] != e[0][1]:
+                self.edges_of_node[e[0][1]].append(e)
+        self.e_o_n = copy.deepcopy(self.edges_of_node)
+
+    def apply_method(self,z):
+
+        #1 建立覆盖集
+        
+        S_ = []
+        S={}
+        k = len(self.nodes)*z
+        k1 = k/2
+
+        num = 1  
+        N=0
+        
+        def nb1(node): # neighbors
+            for e in self.e_o_n[node]:
+                if e[0][0] == node and e[0][1] not in S.keys():
+                    yield e[0][1]
+                if e[0][1] == node and e[0][1] not in S.keys():
+                    yield e[0][0]        
+        
+        nb={i:nb1(i) for i in self.e_o_n}
+
+        def dg(i):
+            # d = 0
+            # if i not in self.e_o_n:
+            #     return 0
+            # for a in self.e_o_n[i]:
+            #     if a[0][0] in S or a[0][1] in S:
+            #         continue
+            #     d+=1
+            # return d
+            if i in self.e_o_n:
+                return len(self.e_o_n[i])
+            return 0
+
+        def f(S1):
+            #cp:connection_partition
+            cp = {}
+            visited = []
+            stack = []
+            id = 0
+            cp[0]=[]
+            num=0
+
+            def dfs(v):  #搜索连通分量
+                cp[id].append(v)
+                visited.append(v) 
+                stack.append(v)
+                while stack:
+                    node = stack.pop()
+                    if v in nb:
+
+                        for neighbour in nb[v]: 
+                            if neighbour not in visited and neighbour not in S1: 
+                                visited.append(neighbour) 
+                                cp[id].append(neighbour) 
+                                stack.append(neighbour)
+                return len(cp[id])
+
+            for v in self.nodes:
+                if v not in visited and v not in S1:
+                    id += 1 
+                    cp[id]=[]
+                    n = dfs(v)  
+                    if n < 2:
+                        continue
+                    num += n*(n-1)/2
+
+            return num
+
+
+        L = sorted(self.nodes,key= dg,reverse=True)
+
+        nb={i:nb1(i) for i in self.e_o_n}
+        S={i:1 for i in S_}
+        S1={}
+        
+        Nc=0 #迭代次数
+
+        while True:
+            #现在开始回添,降到K
+            while len(S1) > k :
+                L = sorted(S1,key= dg)
+                for l in L:
+                    S1.pop(l) #每次删id
+                    if len(S1) <= k :
+                        break
+
+                # min1 = 0 #最小值
+                # id = 0 #最小值的index
+                # for i in S:
+                #     n = 0 
+                #     if i not in self.e_o_n:
+                #         continue
+                #     for e in self.e_o_n[i]: #计算i节点对数
+                #         if e[0][0] not in S or e[0][1] not in S:
+                #             n+=1  
+                #     if n < min1 or min1 == 0 :
+                #         min1 = n
+                #         id = i          
+                # S.pop(id) #每次删id
+
+
+            S1=S
+            
+            # print(len(S))
+            if N > Nc:  #迭代足够
+                break
+
+            while len(S1) > k - k1 : #再回添k1
+                L = sorted(S1,key= dg)
+                for l in L:
+                    S1.pop(l) #每次删id
+                    if len(S1) <= k  - k1:
+                        break
+
+                # min1 = 0 #最小值
+                # id = 0 #最小值的index
+                # for i in S:
+                #     n = 0 
+                #     if i not in self.e_o_n:
+                #         continue
+                #     for e in self.e_o_n[i]: #计算i节点对数
+                #         if e[0][0] not in S or e[0][1] not in S:
+                #             n+=1  
+                #     if n < min1 or min1 == 0 :
+                #         min1 = n
+                #         id = i          
+                # if id in S:
+                #     S.pop(id) #每次删id
+
+
+            while len(S1) < k : # 删k1个，度数最大的加入
+                L = sorted(self.nodes,key= dg,reverse=True)
+                for l in L:
+                    if l not in S1:
+                        S1[l]=1
+                    if len(S1) >= k:
+                        break
+
+            S1=S
+            N += 1
+            # print(len(S))
+            if N > Nc:  #迭代足够
+                break
+            # print(N)
+            while len(S1) < k+k1 : # 删k1个，度数最大的加入
+                L = sorted(self.nodes,key= dg,reverse=True)
+                for l in L:
+                    if l not in S1:
+                        S1[l]=1
+                    if len(S1) >= k+k1 :
+                        break
+
+        nb={i:nb1(i) for i in self.e_o_n}
+        return f(S)
+
+
+    def get_neighbors(self, node):
+        for e in self.edges_of_node[node]:
+            if e[0][0] == e[0][1]: # a node is not neighbor with itself
+                continue
+            if e[0][0] == node:
+                yield e[0][1]
+            if e[0][1] == node:
+                yield e[0][0]

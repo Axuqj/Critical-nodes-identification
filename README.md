@@ -4,6 +4,12 @@ Topology-based heuristics for critical nodes identification.
 
 本文提出一种基于网络拓扑结构的关键节点挖掘算法。
 
+The files include the codes of all the methods for CNP and all the experiments.
+
+Every method is linked to the experimental codes, and called with "test".
+
+They are:
+
 Topology-based-heuristics.py  is the proposed method.
 
 CBG-PylouvainTest.py is the experiment code of  the proposed method, whicth can conduct all kinds of experiments to vertify the effect of the method.
@@ -12,11 +18,6 @@ K-Shell-for-CNP.py   is the KSBG method.
 
 KS-test.py is to test the KSBG method.
 
-As above, other files are the methods and their experiments.
+As above, other files are the codes of methods and their experiments.
 
-
-
-
-
-
-
+And also, all the datasets are provided.

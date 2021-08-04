@@ -1,5 +1,4 @@
 #基于Ks的简单贪心算法
-#ks排序，前k个抓走，输出最后节点对
 
 import copy
 import networkx as nx

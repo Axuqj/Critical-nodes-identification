@@ -24,4 +24,6 @@ generate_SBM.m   generates the SBM model.
 
 generate_RN.m  generates the RN model.
 
-And also, all the other datasets are provided.
+real.py  在诸真实网络中运行诸算法，以及展示实验结果
+
+ERBA.py  在诸人工合成网络中运行诸算法，以及展示实验结果
